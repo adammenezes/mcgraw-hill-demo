@@ -2,11 +2,25 @@ import { Pinecone } from '@pinecone-database/pinecone';
 import { google } from '@ai-sdk/google';
 import { embed, embedMany } from 'ai';
 
-const pc = new Pinecone({
-  apiKey: process.env.PINECONE_API_KEY,
-});
+let pc = null;
+let index = null;
 
-const index = pc.index(process.env.PINECONE_INDEX);
+function getIndex() {
+  if (index) return index;
+  
+  if (!process.env.PINECONE_API_KEY || !process.env.PINECONE_INDEX) {
+    throw new Error('Pinecone API Key and Index name must be defined in environment.');
+  }
+
+  if (!pc) {
+    pc = new Pinecone({
+      apiKey: process.env.PINECONE_API_KEY,
+    });
+  }
+
+  index = pc.index(process.env.PINECONE_INDEX);
+  return index;
+}
 
 /**
  * Splits text into semantic chunks for better retrieval.
@@ -68,7 +82,8 @@ export async function indexDocument(docId, text) {
     },
   }));
 
-  await index.upsert(vectors);
+  const pineconeIndex = getIndex();
+  await pineconeIndex.upsert(vectors);
   return { chunkCount: chunks.length };
 }
 
@@ -78,7 +93,8 @@ export async function indexDocument(docId, text) {
 export async function getRelevantContext(queryText) {
   const queryEmbedding = await getQueryEmbedding(queryText);
 
-  const queryResponse = await index.query({
+  const pineconeIndex = getIndex();
+  const queryResponse = await pineconeIndex.query({
     vector: queryEmbedding,
     topK: 3,
     includeMetadata: true,
